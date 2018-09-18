@@ -1,0 +1,12 @@
+##NAMENODE
+*/5 * * * * sync; echo 3 > /proc/sys/vm/drop_caches
+1 1 * * * find -L /opt/hadoop/logs/ -type f -mtime +3 -exec rm -rf \{\} \;
+*/5 * * * * rsync -azve ssh /data/hadoop servern1:/data/Backups/Servers/Linode/Sn21/ >> /opt/hadoop/logs/Sn21_hadoop_backups.log 2>&1
+#Hadoop Log Archival
+00 01 * * * hadoop . /etc/profile.d/java.sh;/home/bidsopt/Scripts/HDFS_Log_Archival.sh > /home/bidsopt/Scripts/logs/Hadoop_Log_Archival`date +'\%Y\%m\%d\%H'`.log 2>&1
+##SECONDARYNAMENODE
+*/10 * * * * sync; echo 3 > /proc/sys/vm/drop_caches
+1 1 * * * find -L /opt/hadoop/logs/ -type f -mtime +2 -exec rm -rf \{\} \;
+##DATANODE
+*/10 * * * * sync; echo 3 > /proc/sys/vm/drop_caches
+1 1 * * * find -L /opt/hadoop/logs/ -type f -mtime +2 -exec rm -rf \{\} \;

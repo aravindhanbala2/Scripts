@@ -1,0 +1,39 @@
+#!/bin/bash
+
+LICENSE_KEY="TWBk1Qo6STYu"
+SUFFIX="tar.gz"
+DATE_YES=`date --date="4 days ago" +"%Y%m%d"`
+DATE_TOD=`date --date="0 days ago" +"%Y%m%d"`
+
+for DATE in {$DATE_YES,$DATE_TOD}
+do
+
+## Project path
+BASE_PATH="/home/bidsopt/deployment/bootstrap"
+
+##https://www.maxmind.com/app/geoip_download?edition_id=GeoIP2-Country&date=20150908&suffix=tar.gz&license_key=TWBk1Qo6STYu
+URL_BASE="https://www.maxmind.com/app/geoip_download"
+#EDITION="GeoIP2-Connection-Type"
+EDITION="GeoIP2-Country GeoIP2-City GeoIP2-ISP GeoIP2-Connection-Type"
+
+	for edition_id in ${EDITION};
+	do
+		if [ `date --date="1 days ago" +"%Y%m%d"` -eq $DATE -a `find /home/bidsopt/deployment/bootstrap/maxmind -type f -name ${edition_id}.mmdb -mtime -2` -eq 1 ]
+		then
+			continue
+		fi
+			wget -nv -P ${BASE_PATH}/temp/ "${URL_BASE}?edition_id=${edition_id}&date=${DATE}&suffix=${SUFFIX}&license_key=${LICENSE_KEY}"
+			if [[ $? -eq 0 ]]
+			then
+				FILENAME="${edition_id}.${SUFFIX}";
+				mv ${BASE_PATH}/temp/geoip* ${BASE_PATH}/temp/${FILENAME}	
+				tar --strip-components=1 --exclude=*.txt -xzvf ${BASE_PATH}/temp/${FILENAME} -C ${BASE_PATH}/temp/
+				rm -rf ${BASE_PATH}/temp/${FILENAME}
+				touch ${BASE_PATH}/temp/${edition_id}.mmdb
+				mv ${BASE_PATH}/temp/${edition_id}.mmdb ${BASE_PATH}/maxmind/
+				echo "Maxmind edition ${edition_id} for ${DATE} is available - ${edition_id}.mmdb";
+			else
+				echo "Maxmind edition ${edition_id} for ${DATE} is not available";
+			fi
+	done
+done

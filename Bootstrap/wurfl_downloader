@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#BIDSOPT_URL="https://www.scientiamobile.com/wurfl/ipbxh/wurfl.xml.gz"
+BIDSOPT_URL="https://data.scientiamobile.com/ipbxh/wurfl.xml.gz"
+BASE_PATH="/home/bidsopt/deployment/bootstrap"
+
+## Check the dump timestamp
+curl -s -I -H "If-Modified-Since: `date --date="1 days ago"`" ${BIDSOPT_URL} | grep -q "200 OK"
+if [[ $? -eq 1 ]];
+then
+        echo "`date`: There is no new dump available from WURFL";
+else
+        echo "`date`: Having WURFL updates and downloading now..."
+        rm -f ${BASE_PATH}/temp/wurfl.xml.gz
+	#curl -s "https://www.scientiamobile.com/wurfl/ipbxh/wurfl.xml.gz" -o ${BASE_PATH}/temp/wurfl.xml.gz
+        curl -s "${BIDSOPT_URL}" -o ${BASE_PATH}/temp/wurfl.xml.gz
+	gunzip ${BASE_PATH}/temp/wurfl.xml.gz
+	mv ${BASE_PATH}/temp/wurfl.xml ${BASE_PATH}/maxmind/
+        echo "`date`: WURFL updates downloading is completed!"
+fi
+
+## EXIT
+exit 0

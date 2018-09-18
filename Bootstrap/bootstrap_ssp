@@ -1,0 +1,53 @@
+#!/bin/bash
+
+### Configuration
+DB_HOSTNAME="localhost"
+#DB_HOSTNAME="bo_usev_mysql03"
+DB_USERNAME="bootstrap"
+DB_PASSWD="Bootstrap@123"
+DB_NAME="bo_dsp"
+
+MYSQL=`which mysql`;
+BASE_DIR="/home/bidsopt/deployment/bootstrap";
+
+### Entity Selection Query
+#OLD_ENDPOINTS_LINEITEMS_QUERY="select li.lt_id,li.lt_dsp_partner_id,li.lt_countries,li.lt_os,li.lt_display_ads_type,li.lt_network_type,li.lt_ad_type,li.lt_inventory_type, li.lt_max_auction,20,li.lt_qps_limit,ep.ep_endpoint_url,bl.dp_bl_countries from line_items li  inner join endpoints ep on (li.lt_dsp_endpoint_id = ep.ep_id and li.lt_dsp_partner_id = ep.ep_dsp_partner_id) inner join dsp_partners_bl_settings bl ON (bl.dp_bl_dsp_partner_id =  ep.ep_dsp_partner_id) where  li.lt_dsp_partner_id in (select dp_id from dsp_partners where dp_status= 'active') and  ep.ep_status= 'active' AND  li.lt_status = 'active'; ";
+#ENDPOINTS_LINEITEMS_QUERY="select li.lt_id,li.lt_dsp_partner_id,li.lt_countries,li.lt_os,li.lt_display_ads_size,li.lt_network_type,li.lt_ad_format,li.lt_inventory_type, li.lt_max_auction,20, li.lt_qps_limit,ep.ep_endpoint_url,bl.dp_bl_ssp_sources from line_items li inner join endpoints ep on (li.lt_dsp_endpoint_id = ep.ep_id and li.lt_dsp_partner_id = ep.ep_dsp_partner_id) inner join dsp_partners_bl_settings bl ON (bl.dp_bl_dsp_partner_id = ep.ep_dsp_partner_id) where li.lt_dsp_partner_id in (select dp_id from dsp_partners where dp_status= 'active') and ep.ep_status= 'active' AND li.lt_status = 'active';"
+#ENDPOINTS_LINEITEMS_QUERY="select li.lt_id,li.lt_dsp_partner_id,li.lt_countries,li.lt_os,SUBSTRING_INDEX(li.lt_display_ads_size, 'x', 1) as lt_display_ads_width_size, SUBSTRING_INDEX(li.lt_display_ads_size, 'x', -1) as lt_display_ads_height_size, li.lt_network_type,li.lt_ad_format,li.lt_inventory_type, li.lt_max_auction,20, li.lt_qps_limit,ep.ep_endpoint_url from line_items li inner join endpoints ep on (li.lt_dsp_endpoint_id = ep.ep_id and li.lt_dsp_partner_id = ep.ep_dsp_partner_id) where li.lt_dsp_partner_id in (select dp_id from dsp_partners where dp_status= 'active') and ep.ep_status= 'active' AND li.lt_status = 'active';"
+#ENDPOINTS_LINEITEMS_QUERY="SELECT li.lt_id,li.lt_dsp_partner_id,li.lt_countries,li.lt_os,Substring_index(lt_display_ads_size, 'x', 1)  AS width,Substring_index(lt_display_ads_size, 'x', -1) AS height,li.lt_network_type,li.lt_ad_format,li.lt_inventory_type,li.lt_max_auction,20,li.lt_qps_limit,(select ep_endpoint_url from endpoints ep where ep.ep_id = li.lt_dsp_endpoint_id ) as endpoint_url,(select dp_bl_ssp_sources from dsp_partners_bl_settings where li.lt_dsp_partner_id) as blaclistSources FROM   line_items li WHERE  li.lt_dsp_partner_id IN (SELECT dp_id FROM   dsp_partners WHERE  dp_status = 'active')AND li.lt_dsp_endpoint_id in (SELECT ep_id FROM   endpoints WHERE  ep_status = 'active') AND li.lt_status = 'active'; "
+#ENDPOINTS_LINEITEMS_QUERY="SELECT li.lt_id, li.lt_dsp_partner_id, li.lt_countries, li.lt_os, Substring_index(lt_display_ads_size, 'x', 1) AS width, Substring_index(lt_display_ads_size, 'x', -1) AS height, li.lt_network_type, li.lt_ad_format, li.lt_inventory_type, li.lt_max_auction, 1, li.lt_qps_limit, (select ep_endpoint_url from endpoints ep where ep.ep_id = li.lt_dsp_endpoint_id ) as endpoint_url, IFNULL((select dp_bl_ssp_sources from dsp_partners_bl_settings where li.lt_dsp_partner_id),0) as dp_bl_ssp_sources FROM line_items li WHERE li.lt_dsp_partner_id IN (SELECT dp_id FROM dsp_partners WHERE dp_status = 'active') AND li.lt_dsp_endpoint_id in (SELECT ep_id FROM endpoints WHERE ep_status = 'active') AND li.lt_status = 'active';"
+#ENDPOINTS_LINEITEMS_QUERY="SELECT li.lt_id,li.lt_dsp_partner_id, li.lt_countries, li.lt_os, Substring_index(lt_display_ads_size, 'x', 1)  AS width, Substring_index(lt_display_ads_size, 'x', -1) AS height, li.lt_network_type, li.lt_ad_format,li.lt_inventory_type, li.lt_max_auction, li.lt_gross_margin, li.lt_qps_limit, (SELECT ep_endpoint_url FROM   endpoints ep WHERE  ep.ep_id = li.lt_dsp_endpoint_id)  AS endpoint_url, Ifnull((SELECT trim(BOTH  '~' from REPLACE(dp_bl_ssp_sources,',','~'))  FROM   dsp_partners_bl_settings WHERE  dp_bl_dsp_partner_id = li.lt_dsp_partner_id), 0)      AS dp_bl_ssp_sources, 1, 0 FROM   line_items li WHERE  li.lt_dsp_partner_id IN (SELECT dp_id FROM   dsp_partners WHERE  dp_status = 'active') AND li.lt_dsp_endpoint_id IN (SELECT ep_id FROM   endpoints WHERE  ep_status = 'active') AND li.lt_status = 'active';"
+ENDPOINTS_LINEITEMS_QUERY="SELECT li.lt_id,li.lt_dsp_partner_id,li.lt_countries,li.lt_os,Substring_index(lt_display_ads_size, 'x', 1)  AS width,Substring_index(lt_display_ads_size, 'x', -1) AS height,li.lt_network_type,li.lt_ad_format,    li.lt_inventory_type,li.lt_max_auction,li.lt_gross_margin,li.lt_qps_limit,(SELECT ep_endpoint_url FROM   endpoints ep WHERE  ep.ep_id = li.lt_dsp_endpoint_id)  AS endpoint_url,Ifnull((SELECT Trim(both '~' FROM Replace(dp_bl_ssp_sources, ',', '~')) FROM   dsp_partners_bl_settings WHERE  dp_bl_dsp_partner_id = li.lt_dsp_partner_id), 0) AS dp_bl_ssp_sources,1,Ifnull((SELECT GROUP_CONCAT(ad_id SEPARATOR '~') FROM   adquality_alerts WHERE  dsp_id = li.lt_dsp_partner_id and line_id = li.lt_id and is_alert = 1 ), 0) AS ad_id, (select dp_adquality from dsp_partners where dp_id=li.lt_dsp_partner_id and dp_status='active') as adquality FROM   line_items li WHERE  li.lt_dsp_partner_id IN (SELECT dp_id FROM   dsp_partners WHERE  dp_status = 'active') AND li.lt_dsp_endpoint_id IN (SELECT ep_id FROM   endpoints WHERE  ep_status = 'active')  AND li.lt_is_parent < 1 AND li.lt_status = 'active'"
+ENDPOINTS_LINEITEMS_FILE="lineitems.csv";
+
+### Entity Selection Query
+SSP_EXCHANGES_QUERY="SELECT id, lower(ssp_name) from publishers where supply_type='rtb' and status='active';"
+SSP_EXCHANGES_FILE="ssp_exchanges.csv";
+
+
+#### Execution Starts #####
+case "$1" in
+
+"endpoints_lineitems")  
+	echo $ENDPOINTS_LINEITEMS_QUERY | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${ENDPOINTS_LINEITEMS_FILE}; 
+	mv ${BASE_DIR}/temp/${ENDPOINTS_LINEITEMS_FILE} ${BASE_DIR}/sspdata/${ENDPOINTS_LINEITEMS_FILE};
+        ;;
+
+"ssp_exchanges")  
+	echo $SSP_EXCHANGES_QUERY | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${SSP_EXCHANGES_FILE}; 
+	mv ${BASE_DIR}/temp/${SSP_EXCHANGES_FILE} ${BASE_DIR}/sspdata/${SSP_EXCHANGES_FILE};
+        ;;
+
+"start")
+	echo "RUNNING" > ${BASE_DIR}/ssp_status.txt
+	;;
+"stop")
+	rm -f ${BASE_DIR}/ssp_status.txt
+	;;
+*)
+	echo "Usage: $0 <endpoints_lineitems><ssp_exchanges>|<start>|<stop>";
+        ;;
+esac
+
+## Exit
+exit 0

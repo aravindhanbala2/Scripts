@@ -1,0 +1,206 @@
+#!/bin/bash
+
+### Entity, Budget, and Performnace/Predict Data Generator
+### Version: 1.0
+
+### Configuration
+#DB_HOSTNAME="bo_usev_mysql03.bidsopt.com"
+DB_HOSTNAME="localhost"
+DB_USERNAME="bootstrap"
+DB_PASSWD="Bootstrap@123"
+DB_NAME="bo_dsp"
+
+TXN_DB_HOSTNAME="bo_usev_mysql01.bidsopt.com"
+TXN_DB_USERNAME="bootstrap"
+TXN_DB_PASSWD="Bootstrap@123"
+TXN_DB_NAME="bo_txn"
+
+TXN1_DB_NAME="bo_txn_1"
+
+#REPORTS_DB_HOSTNAME="bo_usev_mysql02.bidsopt.com"
+REPORTS_DB_HOSTNAME="tqdg007"
+REPORTS_DB_USERNAME="bootstrap"
+REPORTS_DB_PASSWD="Bootstrap@123"
+REPORTS_DB_NAME="bo_reports"
+
+MYSQL=`which mysql`;
+BASE_DIR="/home/bidsopt/deployment/bootstrap";
+#BASE_DIR="/tmp";
+
+
+### Entity Selection Query
+CARRIERS_QUERY="select country_code,REPLACE(carrier_name,' ',''),UPPER(replace(replace(owners,' ',''),',',' ')) from carriers;"; 
+CARRIERS_FILE="carriers.csv";
+
+NEW_CARRIERS_QUERY="select id,country_code,REPLACE(carrier_name,' ',''),UPPER(replace(replace(owners,' ',''),',',' ')) from carriers;";
+NEW_CARRIERS_FILE="new_carriers.csv";
+
+ADCLIENTS_QUERY="select ac.id,replace(replace(ac.app_name,' ',''),',',' '),ac.publisher_id,ac.status,p.percentage,p.supply_type,p.seat_id,LOWER(p.ssp_name),ac.postback_URL from adclients as ac, publishers as p where ac.publisher_id=p.id";
+ADCLIENTS_FILE="adclients.csv";
+
+ENTITYINIT_QUERY="insert ignore into campaigns_txn select date(now()) as daydate, id, advertiser_id, 0 from campaigns;insert ignore into advertiseraccounts_txn select advertiser_id,0 from advertiseraccounts;";
+
+ROLLOVER_QUERY="insert ignore into campaigns_txn select date(date_add(now(),interval 1 day)) as daydate, id, advertiser_id, 0 from campaigns";
+
+MEDIATION_QUERY="select client_id, LOWER(dsp), dsp_id, rank from mediation";
+MEDIATION_FILE="mediation.csv";
+
+IPLIGENCE_QUERY="select concat(concat(inet_aton(ip_from),'-'),inet_aton(ip_to)),country_code,owner,wifi_enabled from ipligences";
+IPLIGENCE_FILE="internal_ipligence.csv";
+
+#### Execution Starts #####
+case "$1" in
+
+"blacklistip")
+	BLACKLIST_IP_FILE="blacklist_ip.csv";
+	BLACKLIST_QUERY="select ipaddress from blacklist_ips where status='ACTIVE';";
+	echo ${BLACKLIST_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;s/\^/ /g;' | sed -e 's#\r##g;' > ${BASE_DIR}/temp/${BLACKLIST_IP_FILE};
+        test -f ${BASE_DIR}/adserving_status.txt
+        if [[ $? -eq 1 ]];
+        then
+                #cp /dev/null ${BASE_DIR}/temp/${ADS_FILE}
+                cp /dev/null ${BASE_DIR}/temp/${BLACKLIST_IP_FILE}
+        fi
+        #mv ${BASE_DIR}/temp/${ADS_FILE} ${BASE_DIR}/data/${ADS_FILE};
+        mv ${BASE_DIR}/temp/${BLACKLIST_IP_FILE} ${BASE_DIR}/data/${BLACKLIST_IP_FILE};
+        ;;	
+"campaignbudget")
+        ## RTB PUB Overdelivery handling for campaigns other than CPM
+	DATE=`date +"%Y_%m_%d"`;
+	CAMPAIGNBUDGET_FILE="campaign_budget.csv";
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(revenue) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_1=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME $TXN1_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+
+	if [[ "${CAMPAIGN_ID_1}" -eq "" ]]
+        then
+                CAMPAIGN_ID_1=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(revenue) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+        if [[ "${CAMPAIGN_ID}" -eq "" ]]
+        then
+                CAMPAIGN_ID=0;
+        fi
+
+	declare -A campaigns
+	for line in {${CAMPAIGN_ID_1},${CAMPAIGN_ID}}
+	do
+		campaign_id=$(echo $line|awk -F, '{print $1}')
+		if [ -z "${campaigns[${campaign_id}]}" ]
+		then
+			spend=$(echo $line|awk -F, '{print $2}')
+			campaigns[${campaign_id}]=$spend
+		else
+			tmp_spend=`echo $line|awk -F, '{print $2}'`
+			echo "${tmp_spend}"
+			spend=`echo ${campaigns[${campaign_id}]} + $tmp_spend|bc`
+			campaigns[${campaign_id}]=$spend
+		fi
+		
+	done
+
+	#echo ${campaigns[@]};
+	#echo "No of values ${#campaigns[@]}";
+
+	for key in "${!campaigns[@]}"
+	do
+		echo -e "$key,${campaigns[$key]}" >> ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE}
+	done
+
+        test -f ${BASE_DIR}/adserving_status.txt
+        if [[ $? -eq 1 ]];
+        then
+                cp /dev/null ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE}
+        fi
+        mv ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE} ${BASE_DIR}/data/${CAMPAIGNBUDGET_FILE};
+        ;;
+
+"ads")
+	## RTB PUB Overdelivery handling for campaigns other than CPM
+	DATE=`date +"%Y_%m_%d"`;
+	#RTBPUB_OVERDELIVERY_QUERY="select cx.campaign_id, c.daily_budget from campaigns as c, campaign_txn_${DATE} as cx where c.id=cx.campaign_id group by c.id having c.daily_budget*0.90 < sum(revenue)";
+	#CAMPAIGN_ID=`echo ${RTBPUB_OVERDELIVERY_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d | awk '{ printf $1","; }' | sed -e 's/,$//g;'`
+	#if [[ "${CAMPAIGN_ID}" -eq "" ]]
+	#then
+	#	CAMPAIGN_ID=0;
+	#fi
+
+        ## Day-part targeting
+        HOUR=`date +"%H"`;
+#BUCKET
+RTB_ADS_QUERY="SELECT ad.id, ad.campaign_id, ad.strategy_id, ad.creative_id, ad.advertiser_id, LOWER(cr.creative_size), if(st.click_validation IS NULL,0,st.click_validation), st.bid_price, st.cost_metrics, st.network_type, st.landing_page_url, REPLACE(st.mobile_platform,',',' '), REPLACE(REPLACE(st.carriers,' ',''),',',' '), REPLACE(IF(st.devices='ALL','T.ALL.ALL,S.ALL.ALL,F.ALL.ALL',st.devices),',',' '), 'rtb', if(st.is_included_adclients=0,REPLACE(concat(st.rtb_adclients,' ', st.ag_exclude_parent_bucket_id),',',' '),REPLACE(concat(st.rtb_adclients,' ',st.ag_include_parent_bucket_id),',',' ')), NULL, UPPER(REPLACE(REPLACE(st.exclude_browsers,' ',''),',',' ')), st.adv_domain, REPLACE(REPLACE(st.category,',',' '),'.',' '), st.imp_tracker, if(cr.creative_type=6    OR cr.creative_type=7,cr.creative_type,4), st.boost_factor, 0, cr.native_ad_title, cr.native_ad_text, cr.native_ad_icon_img, cr.native_ad_main_img, cr.native_ad_cta_text, cr.native_ad_star_rating, if(st.fcap IS NULL,0,st.fcap), st.traffic_type, cr.creative_source, if(st.gross_margin IS NULL,20,st.gross_margin), cr.creative_type, if(st.ip_target='',NULL,REPLACE(st.ip_target,',',' ')), st.is_included_adclients, cr.video_protocol, ROUND(if(st.cost_metrics='CPM',st.bid_price-(st.bid_price*st.gross_margin)/100+(st.boost_factor*st.bid_price)/100,(st.bid_price/100)+(st.boost_factor*st.bid_price)/100)*1000,5), if(st.targeted_categories='',NULL,REPLACE(st.targeted_categories,',',' ')), cm.daily_budget, replace(replace(st.cities,' ',''),',',' '), replace(concat(st.isp_ids,' '),',',' '), replace(concat(st.age,' '),',',' '), st.gender, st.is_device_targeted, st.ag_is_bundle_targeted, st.ag_is_app_targeted, st.ag_is_device_traffic_only, st.ag_is_bundle_traffic_only, st.ag_is_gps_targeted, cr.api_framework, st.ag_is_include_device, st.ag_is_include_bundle, st.ag_is_include_app, st.ag_aud_capture_event, st.ag_aud_click_file, st.ag_aud_conv_file FROM ads AS ad, creatives AS cr, strategies AS st, campaigns AS cm, campaigns_txn AS cx, advertiseraccounts AS aa, advertiseraccounts_txn AS ax, advertisers AS adv WHERE adv.id=ax.advertiser_id AND adv.status ='active' AND ad.creative_id=cr.id AND ad.strategy_id=st.id AND ad.campaign_id=cm.id AND ad.advertiser_id=aa.advertiser_id AND cm.id=cx.campaign_id AND aa.advertiser_id=ax.advertiser_id AND cm.status='active' AND ad.status='active' AND cm.starting_on<=date(now()) AND cm.ending_on>=date(now()) AND cx.daydate=date(now()) AND st.ag_is_bucket_processed=1 AND st.day_part LIKE \"%${HOUR}%\" AND (aa.balance*1.0) > ax.amount_spent AND IF ((st.cost_metrics='CPM'),((IF (cm.daily_budget < 100,0.90,0.95))*IF (cm.daily_budget > (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), cm.daily_budget)) > cx.daily_amount_spent, (0.97*cm.daily_budget) > cx.daily_amount_spent) and st.updated_at < subtime(current_timestamp(), '0 0:5:0') ORDER BY st.cost_metrics DESC, st.bid_price DESC, rand()"
+#latest_b4        #RTB_ADS_QUERY="SELECT ad.id, ad.campaign_id, ad.strategy_id, ad.creative_id, ad.advertiser_id, LOWER(cr.creative_size), if(st.click_validation IS NULL,0,st.click_validation), st.bid_price, st.cost_metrics, st.network_type, st.landing_page_url, REPLACE(st.mobile_platform,',',' '), REPLACE(REPLACE(st.carriers,' ',''),',',' '), REPLACE(IF(st.devices='ALL','T.ALL.ALL,S.ALL.ALL,F.ALL.ALL',st.devices),',',' '), 'rtb', if(st.is_included_adclients=0,REPLACE(concat(st.rtb_adclients,' ', st.ag_exclude_parent_bucket_id),',',' '),REPLACE(concat(st.rtb_adclients,' ',st.ag_include_parent_bucket_id),',',' ')), NULL, UPPER(REPLACE(REPLACE(st.exclude_browsers,' ',''),',',' ')), st.adv_domain, REPLACE(REPLACE(st.category,',',' '),'.',' '), st.imp_tracker, if(cr.creative_type=6    OR cr.creative_type=7,cr.creative_type,4), st.boost_factor, 0, cr.native_ad_title, cr.native_ad_text, cr.native_ad_icon_img, cr.native_ad_main_img, cr.native_ad_cta_text, cr.native_ad_star_rating, if(st.fcap IS NULL,0,st.fcap), st.traffic_type, cr.creative_source, if(st.gross_margin IS NULL,20,st.gross_margin), cr.creative_type, if(st.ip_target='',NULL,REPLACE(st.ip_target,',',' ')), st.is_included_adclients, cr.video_protocol, ROUND(if(st.cost_metrics='CPM',st.bid_price-(st.bid_price*st.gross_margin)/100+(st.boost_factor*st.bid_price)/100,(st.bid_price/100)+(st.boost_factor*st.bid_price)/100)*1000,5), if(st.targeted_categories='',NULL,REPLACE(st.targeted_categories,',',' ')), cm.daily_budget, replace(replace(st.cities,' ',''),',',' '), replace(concat(st.isp_ids,' '),',',' '), replace(concat(st.age,' '),',',' '), st.gender, st.is_device_targeted, st.ag_is_bundle_targeted FROM ads AS ad, creatives AS cr, strategies AS st, campaigns AS cm, campaigns_txn AS cx, advertiseraccounts AS aa, advertiseraccounts_txn AS ax, advertisers AS adv WHERE adv.id=ax.advertiser_id AND adv.status ='active' AND ad.creative_id=cr.id AND ad.strategy_id=st.id AND ad.campaign_id=cm.id AND ad.advertiser_id=aa.advertiser_id AND cm.id=cx.campaign_id AND aa.advertiser_id=ax.advertiser_id AND cm.status='active' AND ad.status='active' AND cm.starting_on<=date(now()) AND cm.ending_on>=date(now()) AND cx.daydate=date(now()) AND st.ag_is_bucket_processed=1 AND st.day_part LIKE \"%${HOUR}%\" AND (aa.balance*1.0) > ax.amount_spent AND IF ((st.cost_metrics='CPM'),((IF (cm.daily_budget < 100,0.90,0.95))*IF (cm.daily_budget > (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), cm.daily_budget)) > cx.daily_amount_spent, (0.97*cm.daily_budget) > cx.daily_amount_spent) and st.updated_at < subtime(current_timestamp(), '0 0:5:0') ORDER BY st.cost_metrics DESC, st.bid_price DESC, rand()"
+#ROLL BACK
+#	RTB_ADS_QUERY="select ad.id, ad.campaign_id, ad.strategy_id, ad.creative_id, ad.advertiser_id, LOWER(cr.creative_size), if(st.click_validation is NULL,0,st.click_validation), st.bid_price,st.cost_metrics,st.network_type,st.landing_page_url, REPLACE(st.mobile_platform,',',' '), REPLACE(REPLACE(st.carriers,' ',''),',',' '), REPLACE(IF(st.devices='ALL','T.ALL.ALL,S.ALL.ALL,F.ALL.ALL',st.devices),',',' '), 'rtb', if(st.is_included_adclients=0,REPLACE(concat(st.rtb_adclients,concat_ws('',REPLACE(st.excluded_adclients,',,',','),NULL)),',',' '),REPLACE(concat(st.rtb_adclients,concat_ws('',REPLACE(st.included_adclients,',,',','),NULL)),',',' ')), NULL, UPPER(REPLACE(REPLACE(st.exclude_browsers,' ',''),',',' ')), st.adv_domain, REPLACE(REPLACE(st.category,',',' '),'.',' '), st.imp_tracker, if(cr.creative_type=6 or cr.creative_type=7,cr.creative_type,4), st.boost_factor, 0, cr.native_ad_title, cr.native_ad_text, cr.native_ad_icon_img, cr.native_ad_main_img, cr.native_ad_cta_text, cr.native_ad_star_rating, if(st.fcap is NULL,0,st.fcap), st.traffic_type,cr.creative_source,if(st.gross_margin is NULL,20,st.gross_margin),cr.creative_type,if(st.ip_target='',NULL,REPLACE(st.ip_target,',',' ')),st.is_included_adclients,cr.video_protocol,ROUND(if(st.cost_metrics='CPM',st.bid_price-(st.bid_price*st.gross_margin)/100+(st.boost_factor*st.bid_price)/100,(st.bid_price/100)+(st.boost_factor*st.bid_price)/100)*1000,2),if(st.targeted_categories='' ,NULL,REPLACE(st.targeted_categories,',',' ')), cm.daily_budget from ads as ad, creatives as cr, strategies as st, campaigns as cm, campaigns_txn as cx, advertiseraccounts as aa, advertiseraccounts_txn as ax, advertisers as adv where adv.id=ax.advertiser_id and adv.status ='active' and ad.creative_id=cr.id and ad.strategy_id=st.id and ad.campaign_id=cm.id and ad.advertiser_id=aa.advertiser_id and cm.id=cx.campaign_id and aa.advertiser_id=ax.advertiser_id and cm.status='active' and ad.status='active' and cm.starting_on<=date(now()) and cm.ending_on>=date(now()) and cx.daydate=date(now()) and st.day_part like \"%${HOUR}%\" and (aa.balance*1.0) > ax.amount_spent and IF ((st.cost_metrics='CPM'),((IF (cm.daily_budget < 100,0.90,0.95))*IF (cm.daily_budget > (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), cm.daily_budget)) > cx.daily_amount_spent, (0.97*cm.daily_budget) > cx.daily_amount_spent) order by st.cost_metrics desc, st.bid_price desc, rand()";
+	#ADS_QUERY="select ad.id, ad.campaign_id, ad.strategy_id, ad.creative_id, ad.advertiser_id, LOWER(cr.creative_size), if(st.click_validation is NULL,0,st.click_validation), st.bid_price,st.cost_metrics,st.network_type,st.landing_page_url, REPLACE(st.mobile_platform,',',' '), REPLACE(REPLACE(st.carriers,' ',''),',',' '), REPLACE(IF(st.devices='ALL','T.ALL.ALL,S.ALL.ALL,F.ALL.ALL',st.devices),',',' '), 'rtb', if(st.is_included_adclients=0,REPLACE(concat(st.rtb_adclients,concat_ws('',REPLACE(st.excluded_adclients,',,',','),NULL)),',',' '),REPLACE(concat(st.rtb_adclients,concat_ws('',REPLACE(st.included_adclients,',,',','),NULL)),',',' ')), NULL, UPPER(REPLACE(REPLACE(st.exclude_browsers,' ',''),',',' ')), st.adv_domain, REPLACE(REPLACE(st.category,',',' '),'.',' '), st.imp_tracker, if(cr.creative_type=6 or cr.creative_type=7,cr.creative_type,4), st.boost_factor, 0, cr.native_ad_title, cr.native_ad_text, cr.native_ad_icon_img, cr.native_ad_main_img, cr.native_ad_cta_text, cr.native_ad_star_rating, if(st.fcap is NULL,0,st.fcap), st.traffic_type,cr.creative_source,if(st.gross_margin is NULL,20,st.gross_margin),cr.creative_type,if(st.ip_target='',NULL,REPLACE(st.ip_target,',',' ')),st.is_included_adclients,cr.video_protocol,ROUND(if(st.cost_metrics='CPM',st.bid_price-(st.bid_price*st.gross_margin)/100+(st.boost_factor*st.bid_price)/100,(st.bid_price/100)+(st.boost_factor*st.bid_price)/100)*1000,2),if(st.targeted_categories='' ,NULL,REPLACE(st.targeted_categories,',',' ')) from ads as ad, creatives as cr, strategies as st, campaigns as cm, campaigns_txn as cx, advertiseraccounts as aa, advertiseraccounts_txn as ax, advertisers as adv where adv.id=ax.advertiser_id and adv.status ='active' and ad.creative_id=cr.id and ad.strategy_id=st.id and ad.campaign_id=cm.id and ad.advertiser_id=aa.advertiser_id and cm.id=cx.campaign_id and aa.advertiser_id=ax.advertiser_id and cm.status='active' and ad.status='active' and cm.starting_on<=date(now()) and cm.ending_on>=date(now()) and cx.daydate=date(now()) and st.day_part like \"%${HOUR}%\" and (aa.balance*1.0) > ax.amount_spent and IF ((st.cost_metrics='CPM'),((IF (cm.daily_budget < 100,0.90,0.95))*IF (cm.daily_budget > (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), (cm.daily_budget*(cm.pacing_hour/100)*(hour(now())+1)), cm.daily_budget)) > cx.daily_amount_spent, (0.97*cm.daily_budget) > cx.daily_amount_spent) and ad.campaign_id NOT IN (${CAMPAIGN_ID}) order by st.cost_metrics desc, st.bid_price desc, rand()";
+	#ADS_FILE="rtb_ads.csv";
+	RTB_ADS_FILE="new_rtb_ads.csv";
+
+	#echo ${ADS_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;s/\^/ /g;' | sed -e 's#\r##g;' > ${BASE_DIR}/temp/${ADS_FILE};
+	echo ${RTB_ADS_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;s/\^/ /g;' | sed -e 's#\r##g;' > ${BASE_DIR}/temp/${RTB_ADS_FILE};
+ 	test -f ${BASE_DIR}/adserving_status.txt	
+	if [[ $? -eq 1 ]];
+	then
+		#cp /dev/null ${BASE_DIR}/temp/${ADS_FILE}
+		cp /dev/null ${BASE_DIR}/temp/${RTB_ADS_FILE}
+	fi
+	#mv ${BASE_DIR}/temp/${ADS_FILE} ${BASE_DIR}/data/${ADS_FILE};
+	mv ${BASE_DIR}/temp/${RTB_ADS_FILE} ${BASE_DIR}/data/${RTB_ADS_FILE};
+        ;;
+"carriers")
+	echo $CARRIERS_QUERY | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${CARRIERS_FILE}; 
+	mv ${BASE_DIR}/temp/${CARRIERS_FILE} ${BASE_DIR}/data/${CARRIERS_FILE};
+        ;;
+"new_carriers")
+        echo $NEW_CARRIERS_QUERY | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${NEW_CARRIERS_FILE};
+        mv ${BASE_DIR}/temp/${NEW_CARRIERS_FILE} ${BASE_DIR}/data/${NEW_CARRIERS_FILE};
+        ;;
+"adclients")
+	echo ${ADCLIENTS_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${ADCLIENTS_FILE};
+	mv ${BASE_DIR}/temp/${ADCLIENTS_FILE} ${BASE_DIR}/data/${ADCLIENTS_FILE};
+	;;
+"ctrmodel")
+	CPC_STRATEGIES_QUERY="select distinct(campaign_id),gross_margin from strategies where cost_metrics='CPC'"
+	CPC_CAMPAIGN_ID_FILE="cpc_campaignid"
+	rm -f ${BASE_DIR}/temp/${RTB_CTR_FILE} ${BASE_DIR}/temp/${CPC_CAMPAIGN_ID_FILE}
+	echo ${CPC_STRATEGIES_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d  > ${BASE_DIR}/temp/${CPC_CAMPAIGN_ID_FILE}
+
+	RTB_CTR_FILE="ctr_model.csv";
+	while read CPC_CAMPAIGN_ID GROSS_MARGIN
+	do
+	RTB_CTR_QUERY="select co.client_id, co.creative_id, (((sum(co.traffic_clicks)/sum(co.traffic_imps))*100)*(((sum(co.revenue)-sum(co.publisher_cost))/sum(co.revenue)*100)-${GROSS_MARGIN})/100)+((sum(co.traffic_clicks)/sum(co.traffic_imps))*100) as pctr from bo_reports.campaign_optimizer as co where co.campaign_id=${CPC_CAMPAIGN_ID} and co.daydate > date_sub(date(now()),interval 6 day) group by co.client_id, co.creative_id having sum(co.traffic_imps) > 5000 and pctr is not null";
+	echo ${RTB_CTR_QUERY} | $MYSQL -u$REPORTS_DB_USERNAME -p$REPORTS_DB_PASSWD -h$REPORTS_DB_HOSTNAME $REPORTS_DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' >> ${BASE_DIR}/temp/${RTB_CTR_FILE};
+	done < ${BASE_DIR}/temp/${CPC_CAMPAIGN_ID_FILE}
+	mv ${BASE_DIR}/temp/${RTB_CTR_FILE} ${BASE_DIR}/data/${RTB_CTR_FILE};
+	;;
+"mediation")
+        echo ${MEDIATION_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' > ${BASE_DIR}/temp/${MEDIATION_FILE};
+        mv ${BASE_DIR}/temp/${MEDIATION_FILE} ${BASE_DIR}/data/${MEDIATION_FILE};
+        ;;
+"ipligence")
+        echo ${IPLIGENCE_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 | sed 1d | sed -e 's/\t/,/g;' | sort | uniq > ${BASE_DIR}/temp/${IPLIGENCE_FILE};
+        mv ${BASE_DIR}/temp/${IPLIGENCE_FILE} ${BASE_DIR}/data/${IPLIGENCE_FILE};
+	;;
+"entityinit")
+	echo ${ENTITYINIT_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 >/dev/null
+	;;
+"rollover")
+	echo ${ROLLOVER_QUERY} | $MYSQL -u$DB_USERNAME -p$DB_PASSWD -h$DB_HOSTNAME $DB_NAME --default-character-set=utf8 >/dev/null
+	;;
+"start")
+	echo "RUNNING" > ${BASE_DIR}/adserving_status.txt
+	;;
+"stop")
+	rm -f ${BASE_DIR}/adserving_status.txt
+	;;
+*)
+	echo "Usage: $0 <ads|carriers|adclients|ctrmodel>|<mediation>|<ipligence>|<entityinit>|<rollover>|<start>|<stop>";
+        ;;
+esac
+
+
+## Exit
+exit 0
+
+

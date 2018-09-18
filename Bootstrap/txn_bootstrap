@@ -1,0 +1,159 @@
+#!/bin/bash
+
+### Entity, Budget, and Performnace/Predict Data Generator
+### Version: 1.0
+
+### Configuration
+TXN_DB_USERNAME="bootstrap"
+TXN_DB_PASSWD="Bootstrap@123"
+TXN_DB_NAME="bo_txn"
+
+TXN_DB_HOSTNAME_1="tqdg003"
+
+TXN_DB_HOSTNAME_2="tqdg004"
+
+TXN_DB_HOSTNAME_3="tqdg008"
+
+TXN_DB_HOSTNAME_4="tqdg009"
+
+TXN_DB_HOSTNAME_5="tqdg015"
+
+TXN_DB_HOSTNAME_6="bo_usev_mysql01"
+TXN_DB_NAME_1="bo_txn_1"
+
+#TXN_DB_HOSTNAME_7="bo_usev_mysql04"
+#TXN_DB_NAME_2="bo_txn_2"
+#TXN_DB_NAME_3="bo_txn_3"
+
+MYSQL=`which mysql`;
+BASE_DIR="/home/bidsopt/deployment/bootstrap";
+#BASE_DIR="/tmp";
+
+
+### Entity Selection Query
+
+#### Execution Starts #####
+case "$1" in
+
+"txn_budget")
+        ## RTB PUB Overdelivery handling for campaigns other than CPM
+	DATE=`date +"%Y_%m_%d"`;
+	CAMPAIGNBUDGET_FILE="campaign_budget.csv";
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_1=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_1 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+	if [[ "${CAMPAIGN_ID_1}" -eq "" ]]
+        then
+                CAMPAIGN_ID_1=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_2=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_2 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+        if [[ "${CAMPAIGN_ID_2}" -eq "" ]]
+        then
+                CAMPAIGN_ID_2=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_3=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_3 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+	if [[ "${CAMPAIGN_ID_3}" -eq "" ]]
+        then
+                CAMPAIGN_ID_3=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_4=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_4 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+	if [[ "${CAMPAIGN_ID_4}" -eq "" ]]
+        then
+                CAMPAIGN_ID_4=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_5=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_5 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+        if [[ "${CAMPAIGN_ID_5}" -eq "" ]]
+        then
+                CAMPAIGN_ID_5=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_6=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_6 $TXN_DB_NAME --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+        if [[ "${CAMPAIGN_ID_6}" -eq "" ]]
+        then
+                CAMPAIGN_ID_6=0;
+        fi
+
+        CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+        CAMPAIGN_ID_7=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_6 $TXN_DB_NAME_1 --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+        if [[ "${CAMPAIGN_ID_7}" -eq "" ]]
+        then
+                CAMPAIGN_ID_7=0;
+        fi
+
+      #  CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+      #  CAMPAIGN_ID_8=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_6 $TXN_DB_NAME_1 --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+      #  if [[ "${CAMPAIGN_ID_8}" -eq "" ]]
+      #  then
+      #          CAMPAIGN_ID_8=0;
+      #  fi
+
+      #  CAMPAIGNBUDGET_QUERY="select campaign_id, sum(amount_spent) from campaign_txn_${DATE} group by campaign_id";
+      #  CAMPAIGN_ID_9=`echo ${CAMPAIGNBUDGET_QUERY} | $MYSQL -u$TXN_DB_USERNAME -p$TXN_DB_PASSWD -h$TXN_DB_HOSTNAME_9 $TXN_DB_NAME_3 --default-character-set=utf8 2>/dev/null | sed 1d|sed 's/\t/,/g;'`
+      #  if [[ "${CAMPAIGN_ID_9}" -eq "" ]]
+      #  then
+      #          CAMPAIGN_ID_9=0;
+      #  fi
+
+	declare -A campaigns
+	for line in {${CAMPAIGN_ID_1},${CAMPAIGN_ID_2},${CAMPAIGN_ID_3},${CAMPAIGN_ID_4},${CAMPAIGN_ID_5},${CAMPAIGN_ID_6},${CAMPAIGN_ID_7}}
+	do
+		campaign_id=$(echo $line|awk -F, '{print $1}')
+		if [ -z "${campaigns[${campaign_id}]}" ]
+		then
+			spend=$(echo $line|awk -F, '{print $2}')
+			campaigns[${campaign_id}]=$spend
+		else
+			tmp_spend=`echo $line|awk -F, '{print $2}'`
+			echo "${tmp_spend}"
+			#spend=`echo ${campaigns[${campaign_id}]} + $tmp_spend |bc`
+			#spend=$(( ${campaigns[${campaign_id}]}+$tmp_spend ))
+			spend=`awk -v a=${campaigns[${campaign_id}]} -v b=$tmp_spend 'BEGIN{printf "%f\n",a+b}'`
+			campaigns[${campaign_id}]=$spend
+		fi
+		
+	done
+
+	#echo ${campaigns[@]};
+	#echo "No of values ${#campaigns[@]}";
+
+	for key in "${!campaigns[@]}"
+	do
+		if [ $key == 0 ]
+		then
+			continue
+		fi
+		echo -e "$key,${campaigns[$key]}" >> ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE}
+	done
+
+        test -f ${BASE_DIR}/adserving_status.txt
+        if [[ $? -eq 1 ]];
+        then
+                cp /dev/null ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE}
+        fi
+        mv ${BASE_DIR}/temp/${CAMPAIGNBUDGET_FILE} ${BASE_DIR}/data/${CAMPAIGNBUDGET_FILE};
+        ;;
+
+"start")
+	echo "RUNNING" > ${BASE_DIR}/adserving_status.txt
+	;;
+"stop")
+	rm -f ${BASE_DIR}/adserving_status.txt
+	;;
+*)
+	echo "Usage: $0 <txn_budget>|<start>|<stop>";
+        ;;
+esac
+
+
+## Exit
+exit 0
+
